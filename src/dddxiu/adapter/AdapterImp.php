@@ -70,7 +70,7 @@ interface AdapterImp
 
 
     /**
-     * 亲空缓存
+     * 清空缓存
      * @return [type] [description]
      */
     public function flush();

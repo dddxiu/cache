@@ -5,21 +5,18 @@ namespace Dddxiu\adapter;
 use Dddxiu\Cache;
 
 /**
- * Redis缓存
+ * Memcache缓存
+ * 仅支持该客户端
+ * https://github.com/php-memcached-dev/php-memcached
  */
-class Redis implements AdapterImp
+class Memcached implements AdapterImp
 {
-    // PHP开发的客户端
-    const REDIS_TYPE_PHP = 'predis';
 
-    // 扩展开发的客户端
-    const REDIS_TYPE_EXT = 'phpredis';
+    // memcache 实例
+    private $memc = NULL;
 
-    // 客户端类型
-    private $client_type = NULL;
-
-    // 默认超时
-    private $expire_at = 108000;
+    // 前缀
+    private $prefix = NULL;
 
 
     /**
@@ -35,10 +32,10 @@ class Redis implements AdapterImp
         }
         $key = $this->k($key);
         if ($expire_at == Cache::CACHE_FOREVER) {
-            return $this->redis->set($key, $value);
+            $expire_at = 0;
         }
-        // 10秒
-        $this->redis->set($key, $value, ['nx', 'ex'=>$expire_at]);
+        // 3600*30*24 = 2592000 大于30天认为是unix时间戳
+        return $this->memc->set($key, $value, $expire_at);
     }
 
 
@@ -65,11 +62,11 @@ class Redis implements AdapterImp
     public function get(string $key, $default=NULL)
     {
         $key = $this->k($key);
-        $ret = $this->redis->get($key);
-        if ($ret === false) {
-            return $default;
+        $val = $this->memc->get($key);
+        if (0 === $this->memc->getResultCode()) {
+            return $val ?? $default;;
         }
-        return $ret ?? $default;
+        return NULL;
     }
 
 
@@ -97,12 +94,16 @@ class Redis implements AdapterImp
     public function inc(string $key, $step=1)
     {
         $key = $this->k($key);
-        return $this->redis->incr($key, $step);
+        $val = $this->memc->get($key);
+        if (intval($val) === 0) {
+            $this->memc->set($key, 0);
+        }
+        return $this->memc->increment($key, $step);
     }
 
 
     /**
-     * 减少
+     * 减少,最少为0
      * @param  string  $key  [description]
      * @param  integer $step [description]
      * @return [type]        [description]
@@ -110,7 +111,11 @@ class Redis implements AdapterImp
     public function dec(string $key, $step=1)
     {
         $key = $this->k($key);
-        return $this->redis->decr($key, $step);
+        $val = $this->memc->get($key);
+        if (intval($val) === 0) {
+            $this->memc->set($key, 0);
+        }
+        return $this->memc->decrement($key, $step);
     }
 
 
@@ -122,7 +127,7 @@ class Redis implements AdapterImp
     public function del(string $key)
     {
         $key = $this->k($key);
-        return $this->redis->del($key);
+        return $this->memc->delete($key);
     }
 
 
@@ -132,20 +137,23 @@ class Redis implements AdapterImp
      */
     public function flush()
     {
-        return $this->redis->flushDb();
+        return $this->memc->flush();
     }
 
 
+    /**
+     * load配置
+     * @param  array  $conf [description]
+     * @return [type]       [description]
+     */
     public function load(array $conf)
     {
-        $file_conf = $conf['conf'];
         $this->expire_at = $conf['expire_at'];
         if ($this->expire_at < -1) {
             throw new \Exception("file expire_at:{$this->expire_at} value error", 1);
         }
         $this->prefix = $conf['prefix'];
-        $this->redis  = $file_conf['redis'];
-        $this->client_type = $file_conf['client'];
+        $this->memc   = $conf['conf']['memc'];
     }
 
 
@@ -159,6 +167,7 @@ class Redis implements AdapterImp
         if (empty($this->prefix)) {
             return $key;
         }
-        return "{$this->prefix}{$key}";
+        $key = "{$this->prefix}{$key}";
+        return $key;
     }
 }

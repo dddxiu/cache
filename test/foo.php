@@ -2,7 +2,35 @@
 
 include dirname(__DIR__).'/vendor/autoload.php';
 
-test_redis();
+// test_memcache();
+
+function test_memcache()
+{
+    $m = new Memcached();
+    $m->addServer('localhost', 11211);
+
+    \Dddxiu\Cache::conf([
+        'type'      => 'memcached',   // 缓存类型
+        'expire_at' => 10,    // 默认超时(秒)
+        'prefix'    => 'prefix_', // 前缀
+        'conf'      => [
+            'memc' => $m,   // memcached资源
+        ]
+    ]);
+    cache(['name'=>'zhangsan123'], 5);
+    var_dump(cache('name', 'default'));
+    // \Dddxiu\Cache::inc('score', 5);
+    \Dddxiu\Cache::dec('score', 2);
+    $ret = \Dddxiu\Cache::get('score');
+    var_dump($ret);
+    // $ret = \Dddxiu\Cache::flush();
+    // 最少减少到0
+    // $ret = \Dddxiu\Cache::del('score');
+    // var_dump($ret);
+    var_dump(cache('score'));
+    exit();
+}
+
 
 function test_redis()
 {
